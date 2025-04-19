@@ -3,11 +3,13 @@
 #include <cmath>
 #include <random>
 #include <omp.h>
-#include <cstring>
+#include <chrono>
+#include <string>
 
-const double G = 6.674e-11;
-const double SOFTENING = 1e-9;
+const double G = 6.674e-11; // Gravitational constant
+const double SOFTENING = 1e-9; // Softening factor to prevent instability
 
+// Vector structure for position, velocity, force
 struct Vec3 {
     double x, y, z;
 
@@ -22,11 +24,13 @@ struct Vec3 {
     double norm_squared() const { return x*x + y*y + z*z; }
 };
 
+// Particle structure to store mass, position, velocity, and force
 struct Particle {
     double mass;
     Vec3 pos, vel, force;
 };
 
+// Function to compute forces on particles
 void compute_forces(std::vector<Particle>& particles) {
     int n = particles.size();
     #pragma omp parallel for schedule(dynamic)
@@ -45,6 +49,7 @@ void compute_forces(std::vector<Particle>& particles) {
     }
 }
 
+// Function to update positions and velocities
 void update_particles(std::vector<Particle>& particles, double dt) {
     #pragma omp parallel for
     for (size_t i = 0; i < particles.size(); ++i) {
@@ -54,6 +59,7 @@ void update_particles(std::vector<Particle>& particles, double dt) {
     }
 }
 
+// Function to output the state of the system (positions, velocities, forces)
 void output_state(const std::vector<Particle>& particles) {
     std::cout << particles.size();
     for (const auto& p : particles) {
@@ -65,6 +71,7 @@ void output_state(const std::vector<Particle>& particles) {
     std::cout << "\n";
 }
 
+// Function to initialize particles randomly
 void random_init(std::vector<Particle>& particles, int n) {
     std::mt19937 gen(42);
     std::uniform_real_distribution<double> dist(-1e11, 1e11);
@@ -81,6 +88,17 @@ void random_init(std::vector<Particle>& particles, int n) {
     }
 }
 
+// Function to initialize the solar system configuration
+void solar_system_init(std::vector<Particle>& particles) {
+    // Define the solar system with some basic particles
+    particles.push_back({1.989e30, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}}); // Sun
+    particles.push_back({5.972e24, {1.496e11, 0, 0}, {0, 29780, 0}, {0, 0, 0}}); // Earth
+    particles.push_back({7.348e22, {1.496e11 + 384400000, 0, 0}, {0, 29780 + 1022, 0}, {0, 0, 0}}); // Moon
+
+    // Add more particles here as needed
+}
+
+// Main simulation loop
 int main(int argc, char** argv) {
     if (argc < 5) {
         std::cerr << "Usage: " << argv[0] << " <num_particles|'planet'|filename> <dt> <steps> <output_interval>\n";
@@ -93,19 +111,31 @@ int main(int argc, char** argv) {
     int steps = std::stoi(argv[3]);
     int output_interval = std::stoi(argv[4]);
 
-    if (isdigit(mode[0])) {
+    // Initialize particles based on the input mode
+    if (mode == "planet") {
+        solar_system_init(particles);
+    } else if (isdigit(mode[0])) {
         int n = std::stoi(mode);
         random_init(particles, n);
     } else {
-        std::cerr << "Only random init supported for now.\n";
+        std::cerr << "Unknown initialization mode: " << mode << std::endl;
         return 1;
     }
 
+    // Start the clock for benchmarking
+    auto start = std::chrono::high_resolution_clock::now();
+
+    // Main simulation loop
     for (int step = 0; step <= steps; ++step) {
         compute_forces(particles);
         update_particles(particles, dt);
         if (step % output_interval == 0) output_state(particles);
     }
+
+    // End the clock and print elapsed time
+    auto end = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> duration = end - start;
+    std::cerr << "Simulation took " << duration.count() << " seconds\n";
 
     return 0;
 }
